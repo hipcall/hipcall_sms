@@ -56,11 +56,11 @@ defmodule HipcallSMS.SMS do
   @type provider_options :: map()
 
   @type t :: %__MODULE__{
-    id: id,
-    direction: direction,
-    from: from,
-    to: to,
-    text: text,
-    provider_options: provider_options
-  }
+          id: id,
+          direction: direction,
+          from: from,
+          to: to,
+          text: text,
+          provider_options: provider_options
+        }
 end
