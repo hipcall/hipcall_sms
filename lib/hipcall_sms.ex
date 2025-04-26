@@ -3,6 +3,13 @@ defmodule HipcallSMS do
   Documentation for `HipcallSMS`.
   """
 
+  @version Mix.Project.config()[:version]
+
+  @doc """
+  Returns the current version of HipcallSMS.
+  """
+  def version, do: @version
+
   @doc """
   Hello world.
 

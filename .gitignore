@@ -21,3 +21,9 @@ hipcall_sms-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Personal notes for development env.
+NOTES.md
+
+# ASDF tool versions
+.tool-versions

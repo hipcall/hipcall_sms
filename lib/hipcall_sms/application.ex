@@ -8,6 +8,7 @@ defmodule HipcallSMS.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {Finch, name: HipcallSMSFinch}
       # Starts a worker by calling: HipcallSMS.Worker.start_link(arg)
       # {HipcallSMS.Worker, arg}
     ]
