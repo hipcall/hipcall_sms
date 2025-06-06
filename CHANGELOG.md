@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 (2025-06-XX)
+## v0.3.0 (2025-06-06)
 
 - Add `get_balance` function.
 
