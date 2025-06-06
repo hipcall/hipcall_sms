@@ -14,18 +14,9 @@ defmodule HipcallSMS.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
-      source_url: @source_url,
-      homepage_url: @source_url,
       docs: docs(),
-      test_coverage: [tool: ExCoveralls],
-      preferred_cli_env: [
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "test.coverage": :test
-      ],
-      aliases: aliases()
+      source_url: @source_url,
+      homepage_url: @source_url
     ]
   end
 
@@ -43,8 +34,7 @@ defmodule HipcallSMS.MixProject do
       {:finch, "~> 0.19"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ex_doc, "~> 0.37", only: :dev, runtime: false},
-      {:excoveralls, "~> 0.18", only: :test}
+      {:ex_doc, "~> 0.37", only: :dev, runtime: false}
     ]
   end
 
@@ -67,12 +57,6 @@ defmodule HipcallSMS.MixProject do
       source_ref: "v#{@version}",
       source_url: @source_url,
       extras: ["README.md", "CHANGELOG.md", "LICENSE.md"]
-    ]
-  end
-
-  defp aliases do
-    [
-      "test.coverage": ["coveralls.html"]
     ]
   end
 end
