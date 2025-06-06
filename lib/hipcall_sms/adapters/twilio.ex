@@ -133,6 +133,37 @@ defmodule HipcallSMS.Adapters.Twilio do
     |> handle_response()
   end
 
+  @doc """
+  Gets the account balance from Twilio.
+
+  Note: Twilio does not provide a simple balance endpoint like other providers.
+  This function returns an error indicating that balance checking is not supported
+  for Twilio through this adapter.
+
+  For Twilio balance information, you would need to use their Account API
+  or check your Twilio Console.
+
+  ## Parameters
+
+  - `config` - Configuration keyword list (ignored)
+
+  ## Returns
+
+  - `{:error, reason}` - Always returns an error as this feature is not supported
+
+  """
+  @impl HipcallSMS.Adapter
+  @spec get_balance(Keyword.t()) :: {:error, map()}
+  def get_balance(_config \\ []) do
+    {:error,
+     %{
+       error: "Balance checking not supported",
+       message:
+         "Twilio does not provide a simple balance endpoint. Please check your Twilio Console for account balance information.",
+       provider: "twilio"
+     }}
+  end
+
   # Prepares HTTP headers for Twilio API request
   @spec prepare_headers(Keyword.t()) :: [{String.t(), String.t()}]
   defp prepare_headers(config) do

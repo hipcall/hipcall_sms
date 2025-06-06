@@ -41,6 +41,10 @@ defmodule HipcallSMS do
 
       # Quick send
       HipcallSMS.send_sms("+15551234567", "+15555555555", "Hello!")
+
+      # Check account balance
+      {:ok, balance} = HipcallSMS.get_balance()
+      IO.puts("Current balance: " <> balance.balance <> " " <> balance.currency)
   """
 
   alias HipcallSMS.{SMS, Adapter}
@@ -56,7 +60,7 @@ defmodule HipcallSMS do
   ## Examples
 
       iex> HipcallSMS.version()
-      "0.2.0"
+      "0.3.0"
 
   """
   @spec version() :: String.t()
@@ -189,6 +193,67 @@ defmodule HipcallSMS do
       |> SMS.text(text)
 
     deliver(sms, config)
+  end
+
+  @doc """
+  Gets the account balance from the configured SMS provider.
+
+  This function retrieves the current account balance information from the provider's API.
+  The response format may vary between providers but will be normalized to include
+  common balance information.
+
+  ## Parameters
+
+  - `config` - Optional keyword list to override adapter configuration
+
+  ## Returns
+
+  - `{:ok, balance_info}` - Success with balance information map
+  - `{:error, reason}` - Failure with error details
+
+  ## Examples
+
+      # Get balance with application config
+      {:ok, balance} = HipcallSMS.get_balance()
+
+      # With Telnyx configuration override
+      config = [
+        adapter: HipcallSMS.Adapters.Telnyx,
+        api_key: "your_api_key"
+      ]
+      {:ok, balance} = HipcallSMS.get_balance(config)
+      # => {:ok, %{balance: "300.00", currency: "USD", credit_limit: "100.00", ...}}
+
+      # With Iletimerkezi configuration override
+      config = [
+        adapter: HipcallSMS.Adapters.Iletimerkezi,
+        key: "your_key",
+        hash: "your_hash"
+      ]
+      {:ok, balance} = HipcallSMS.get_balance(config)
+      # => {:ok, %{balance: "0", sms_balance: "18343", currency: "TRY", ...}}
+
+  ## Error Handling
+
+      case HipcallSMS.get_balance() do
+        {:ok, balance} ->
+          IO.puts("Current balance: " <> balance.balance <> " " <> balance.currency)
+        {:error, %{status: 401}} ->
+          IO.puts("Authentication failed")
+        {:error, %{status: 400, body: body}} ->
+          IO.puts("Bad request: " <> inspect(body))
+        {:error, reason} ->
+          IO.puts("Failed to get balance: " <> inspect(reason))
+      end
+
+  """
+  @spec get_balance(config()) :: {:ok, map()} | {:error, map()}
+  def get_balance(config \\ []) do
+    adapter = config[:adapter] || get_adapter()
+    merged_config = merge_config(adapter, config)
+
+    adapter.validate_config(merged_config)
+    adapter.get_balance(merged_config)
   end
 
   defp get_adapter do

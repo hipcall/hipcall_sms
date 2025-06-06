@@ -420,4 +420,53 @@ defmodule HipcallSMS.Adapters.TwilioTest do
       assert response.id == "SM_nil_options"
     end
   end
+
+  describe "get_balance/1" do
+    test "returns not supported error" do
+      assert {:error, error} = Twilio.get_balance([])
+
+      assert error.error == "Balance checking not supported"
+      assert error.provider == "twilio"
+      assert error.message =~ "Twilio does not provide a simple balance endpoint"
+    end
+
+    test "returns not supported error with config" do
+      config = [account_sid: "ACtest123", auth_token: "test_token"]
+
+      assert {:error, error} = Twilio.get_balance(config)
+
+      assert error.error == "Balance checking not supported"
+      assert error.provider == "twilio"
+      assert error.message =~ "Please check your Twilio Console"
+    end
+
+    test "ignores all configuration parameters" do
+      config = [
+        account_sid: "ACtest123",
+        auth_token: "test_token",
+        some_other: "parameter"
+      ]
+
+      assert {:error, error} = Twilio.get_balance(config)
+
+      assert error.error == "Balance checking not supported"
+      assert error.provider == "twilio"
+    end
+
+    test "works without config parameter" do
+      assert {:error, error} = Twilio.get_balance()
+
+      assert error.error == "Balance checking not supported"
+      assert error.provider == "twilio"
+    end
+
+    test "consistent error message format" do
+      assert {:error, error} = Twilio.get_balance([])
+
+      assert is_binary(error.error)
+      assert is_binary(error.message)
+      assert is_binary(error.provider)
+      assert error.provider == "twilio"
+    end
+  end
 end

@@ -58,6 +58,7 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
   """
 
   @api_endpoint "https://api.iletimerkezi.com/v1/send-sms/json"
+  @balance_endpoint "https://api.iletimerkezi.com/v1/get-balance/json"
 
   # @provider_options_body_fields [
   #   :iys,
@@ -133,6 +134,61 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
     |> handle_response()
   end
 
+  @doc """
+  Gets the account balance from Iletimerkezi's REST API.
+
+  This function retrieves the current account balance using Iletimerkezi's Balance API.
+  It handles authentication and response parsing.
+
+  ## Parameters
+
+  - `config` - Configuration keyword list (optional, defaults to application config)
+
+  ## Returns
+
+  - `{:ok, balance_info}` - Success with balance information
+  - `{:error, reason}` - Failure with error details including HTTP status and body
+
+  ## Response Format
+
+  Success responses contain normalized balance information:
+
+      %{
+        balance: "300.00",           # Current account balance (TL)
+        sms_balance: "18343",        # SMS credit balance
+        currency: "TRY",             # Currency (Turkish Lira)
+        provider: "iletimerkezi",    # Provider identifier
+        provider_response: %{}       # Full Iletimerkezi API response
+      }
+
+  ## Examples
+
+      # Get balance with application config
+      {:ok, balance} = get_balance()
+
+      # Get balance with custom config
+      config = [key: "custom_key", hash: "custom_hash"]
+      {:ok, balance} = get_balance(config)
+
+  """
+  @impl HipcallSMS.Adapter
+  @spec get_balance(Keyword.t()) :: {:ok, map()} | {:error, map()}
+  def get_balance(config \\ []) do
+    validate_iletimerkezi_config(config)
+
+    headers = prepare_headers()
+    body = prepare_balance_body(config) |> Jason.encode!()
+
+    http_client().request(
+      :post,
+      @balance_endpoint,
+      headers,
+      body,
+      receive_timeout: 600_000
+    )
+    |> handle_balance_response()
+  end
+
   # Prepares HTTP headers for Iletimerkezi API request
   @spec prepare_headers() :: [{String.t(), String.t()}]
   defp prepare_headers() do
@@ -175,6 +231,22 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
     }
   end
 
+  # Prepares the request body for balance API call
+  @spec prepare_balance_body(Keyword.t()) :: map()
+  defp prepare_balance_body(config) do
+    key = config[:key] || get_config_value(:iletimerkezi_key, nil)
+    hash = config[:hash] || get_config_value(:iletimerkezi_hash, nil)
+
+    %{
+      request: %{
+        authentication: %{
+          key: key,
+          hash: hash
+        }
+      }
+    }
+  end
+
   # Handles HTTP response from Iletimerkezi API
   @spec handle_response({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, map()}
   defp handle_response({:ok, %{status: 200, body: body}}) do
@@ -201,6 +273,32 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
     {:error, %{error: reason, provider: "iletimerkezi"}}
   end
 
+  # Handles HTTP response from Iletimerkezi Balance API
+  @spec handle_balance_response({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, map()}
+  defp handle_balance_response({:ok, %{status: 200, body: body}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:ok, normalize_balance_response(decoded_body)}
+
+      {:error, _} ->
+        {:error, %{status: 200, body: body, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_balance_response({:ok, %{status: status, body: body, headers: headers}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:error, %{status: status, body: decoded_body, headers: headers}}
+
+      {:error, _} ->
+        {:error, %{status: status, body: body, headers: headers, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_balance_response({:error, reason}) do
+    {:error, %{error: reason, provider: "iletimerkezi"}}
+  end
+
   # Normalizes Iletimerkezi API response to standard format
   @spec normalize_response(map()) :: map()
   defp normalize_response(response) do
@@ -218,6 +316,20 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
       "200" -> "queued"
       _ -> "failed"
     end
+  end
+
+  # Normalizes Iletimerkezi Balance API response to standard format
+  @spec normalize_balance_response(map()) :: map()
+  defp normalize_balance_response(response) do
+    balance_data = get_in(response, ["response", "balance"])
+
+    %{
+      balance: balance_data["amount"],
+      sms_balance: balance_data["sms"],
+      currency: "TRY",
+      provider: "iletimerkezi",
+      provider_response: response
+    }
   end
 
   # Returns the configured HTTP client module

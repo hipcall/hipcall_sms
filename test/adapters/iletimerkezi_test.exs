@@ -489,4 +489,243 @@ defmodule HipcallSMS.Adapters.IletimerkeziTest do
       assert response.status == "failed"
     end
   end
+
+  describe "get_balance/1" do
+    test "requires key and hash configuration" do
+      assert_raise RuntimeError, ~r/key is required/, fn ->
+        Iletimerkezi.get_balance([])
+      end
+
+      assert_raise RuntimeError, ~r/hash is required/, fn ->
+        Iletimerkezi.get_balance(key: "test_key")
+      end
+    end
+
+    test "successfully gets balance with valid configuration" do
+      config = [key: "test_key123", hash: "test_hash123"]
+
+      # Mock successful balance API response
+      expect(HTTPClientMock, :request, fn :post, url, headers, body, _opts ->
+        assert url == "https://api.iletimerkezi.com/v1/get-balance/json"
+        assert {"Content-Type", "application/json"} in headers
+
+        # Verify request body
+        decoded_body = Jason.decode!(body)
+        assert decoded_body["request"]["authentication"]["key"] == "test_key123"
+        assert decoded_body["request"]["authentication"]["hash"] == "test_hash123"
+
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "200",
+                   "message" => "OK"
+                 },
+                 "balance" => %{
+                   "amount" => "300.00",
+                   "sms" => "18343"
+                 }
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Iletimerkezi.get_balance(config)
+      assert balance.balance == "300.00"
+      assert balance.sms_balance == "18343"
+      assert balance.currency == "TRY"
+      assert balance.provider == "iletimerkezi"
+      assert is_map(balance.provider_response)
+    end
+
+    test "uses config from application environment" do
+      # Set up application config
+      Application.put_env(:hipcall_sms, :iletimerkezi_key, "key_from_env")
+      Application.put_env(:hipcall_sms, :iletimerkezi_hash, "hash_from_env")
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, body, _opts ->
+        decoded_body = Jason.decode!(body)
+        assert decoded_body["request"]["authentication"]["key"] == "key_from_env"
+        assert decoded_body["request"]["authentication"]["hash"] == "hash_from_env"
+
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "200",
+                   "message" => "OK"
+                 },
+                 "balance" => %{
+                   "amount" => "250.00",
+                   "sms" => "15000"
+                 }
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Iletimerkezi.get_balance([])
+      assert balance.balance == "250.00"
+      assert balance.sms_balance == "15000"
+
+      # Clean up
+      Application.delete_env(:hipcall_sms, :iletimerkezi_key)
+      Application.delete_env(:hipcall_sms, :iletimerkezi_hash)
+    end
+
+    test "handles API error responses" do
+      config = [key: "invalid_key", hash: "invalid_hash"]
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 401,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "401",
+                   "message" => "Unauthorized"
+                 }
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:error, error} = Iletimerkezi.get_balance(config)
+      assert error.status == 401
+      assert is_map(error.body)
+    end
+
+    test "handles network errors" do
+      config = [key: "test_key456", hash: "test_hash456"]
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:error, :timeout}
+      end)
+
+      assert {:error, error} = Iletimerkezi.get_balance(config)
+      assert error.error == :timeout
+      assert error.provider == "iletimerkezi"
+    end
+
+    test "handles invalid JSON response" do
+      config = [key: "test_key456", hash: "test_hash456"]
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body: "invalid json response",
+           headers: []
+         }}
+      end)
+
+      assert {:error, error} = Iletimerkezi.get_balance(config)
+      assert error.status == 200
+      assert error.error == "Invalid JSON response"
+    end
+
+    test "handles zero balance" do
+      config = [key: "test_key123", hash: "test_hash123"]
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "200",
+                   "message" => "OK"
+                 },
+                 "balance" => %{
+                   "amount" => "0.00",
+                   "sms" => "0"
+                 }
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Iletimerkezi.get_balance(config)
+      assert balance.balance == "0.00"
+      assert balance.sms_balance == "0"
+      assert balance.currency == "TRY"
+    end
+
+    test "handles missing balance data in response" do
+      config = [key: "test_key123", hash: "test_hash123"]
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "200",
+                   "message" => "OK"
+                 }
+                 # Missing balance data
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Iletimerkezi.get_balance(config)
+      assert balance.balance == nil
+      assert balance.sms_balance == nil
+      assert balance.currency == "TRY"
+      assert balance.provider == "iletimerkezi"
+    end
+
+    test "works without config parameter" do
+      # Set up application config
+      Application.put_env(:hipcall_sms, :iletimerkezi_key, "default_key")
+      Application.put_env(:hipcall_sms, :iletimerkezi_hash, "default_hash")
+
+      expect(HTTPClientMock, :request, fn :post, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "response" => %{
+                 "status" => %{
+                   "code" => "200",
+                   "message" => "OK"
+                 },
+                 "balance" => %{
+                   "amount" => "150.00",
+                   "sms" => "10000"
+                 }
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Iletimerkezi.get_balance()
+      assert balance.balance == "150.00"
+      assert balance.sms_balance == "10000"
+
+      # Clean up
+      Application.delete_env(:hipcall_sms, :iletimerkezi_key)
+      Application.delete_env(:hipcall_sms, :iletimerkezi_hash)
+    end
+  end
 end

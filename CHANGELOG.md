@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0 (2025-06-06)
+
+- Add `get_balance` function.
+
 ## v0.2.0 (2025-06-06)
 
 - Add Telnyx

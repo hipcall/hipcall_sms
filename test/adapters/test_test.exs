@@ -136,6 +136,36 @@ defmodule HipcallSMS.Adapters.TestTest do
     end
   end
 
+  describe "get_balance/1" do
+    test "returns mock balance response" do
+      assert {:ok, balance} = Test.get_balance([])
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
+      assert balance.provider_response.mock == true
+      assert balance.provider_response.message == "This is a mock balance response for testing"
+    end
+
+    test "ignores config parameter" do
+      config = [some: "config", that: "is_ignored"]
+
+      assert {:ok, balance} = Test.get_balance(config)
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
+    end
+
+    test "works without config parameter" do
+      assert {:ok, balance} = Test.get_balance()
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
+    end
+  end
+
   describe "integration with HipcallSMS.deliver/2" do
     setup do
       Application.put_env(:hipcall_sms, :adapter, HipcallSMS.Adapters.Test)
@@ -158,6 +188,14 @@ defmodule HipcallSMS.Adapters.TestTest do
       assert received_sms.from == "+15551234567"
       assert received_sms.to == "+15555555555"
       assert received_sms.text == "Quick send test"
+    end
+
+    test "balance works through main HipcallSMS interface" do
+      assert {:ok, balance} = HipcallSMS.get_balance()
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
     end
   end
 end
