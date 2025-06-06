@@ -110,16 +110,18 @@ defmodule HipcallSMS.Adapters.Telnyx do
   @impl HipcallSMS.Adapter
   @spec deliver(SMS.t(), Keyword.t()) :: {:ok, map()} | {:error, map()}
   def deliver(%SMS{} = sms, config \\ []) do
+    validate_telnyx_config(config)
+
     headers = prepare_headers(config)
     body = prepare_body(sms, config) |> Jason.encode!()
 
-    Finch.build(
+    http_client().request(
       :post,
       @api_endpoint,
       headers,
-      body
+      body,
+      receive_timeout: 600_000
     )
-    |> Finch.request(HipcallSMSFinch, receive_timeout: 600_000)
     |> handle_response()
   end
 
@@ -148,7 +150,10 @@ defmodule HipcallSMS.Adapters.Telnyx do
       provider_options[:webhook_failover_url] || config[:webhook_failover_url]
 
     use_profile_webhooks =
-      provider_options[:use_profile_webhooks] || config[:use_profile_webhooks] || true
+      case provider_options[:use_profile_webhooks] do
+        nil -> config[:use_profile_webhooks] || true
+        value -> value
+      end
 
     type = provider_options[:type] || "SMS"
     auto_detect = provider_options[:auto_detect] || config[:auto_detect]
@@ -171,9 +176,9 @@ defmodule HipcallSMS.Adapters.Telnyx do
   end
 
   # Handles HTTP response from Telnyx API
-  @spec handle_response({:ok, Finch.Response.t()} | {:error, any()}) ::
+  @spec handle_response({:ok, map()} | {:error, any()}) ::
           {:ok, map()} | {:error, map()}
-  defp handle_response({:ok, %Finch.Response{status: 200, body: body}}) do
+  defp handle_response({:ok, %{status: 200, body: body}}) do
     case Jason.decode(body) do
       {:ok, decoded_body} ->
         {:ok, normalize_response(decoded_body)}
@@ -183,7 +188,7 @@ defmodule HipcallSMS.Adapters.Telnyx do
     end
   end
 
-  defp handle_response({:ok, %Finch.Response{status: status, body: body, headers: headers}}) do
+  defp handle_response({:ok, %{status: status, body: body, headers: headers}}) do
     case Jason.decode(body) do
       {:ok, decoded_body} ->
         {:error, %{status: status, body: decoded_body, headers: headers}}
@@ -214,4 +219,20 @@ defmodule HipcallSMS.Adapters.Telnyx do
   @spec maybe_add_field(map(), atom(), any()) :: map()
   defp maybe_add_field(body, _key, nil), do: body
   defp maybe_add_field(body, key, value), do: Map.put(body, key, value)
+
+  # Returns the configured HTTP client module
+  defp http_client do
+    Application.get_env(:hipcall_sms, :http_client, HipcallSMS.HTTPClient.FinchClient)
+  end
+
+  # Validates Telnyx-specific configuration
+  defp validate_telnyx_config(config) do
+    api_key = config[:api_key] || get_config_value(:telnyx_api_key, nil)
+
+    if api_key in [nil, ""] do
+      raise ArgumentError, "api_key is required for Telnyx adapter"
+    end
+
+    :ok
+  end
 end

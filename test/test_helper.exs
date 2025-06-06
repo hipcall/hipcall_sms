@@ -1,3 +1,9 @@
+# Define the mock for HTTP client
+Mox.defmock(HipcallSMS.HTTPClient.Mock, for: HipcallSMS.HTTPClient)
+
+# Configure the application to use the mock in tests
+Application.put_env(:hipcall_sms, :http_client, HipcallSMS.HTTPClient.Mock)
+
 ExUnit.start()
 
 # Set up configuration for doctests

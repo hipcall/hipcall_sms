@@ -118,26 +118,19 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
   @impl HipcallSMS.Adapter
   @spec deliver(SMS.t(), Keyword.t()) :: {:ok, map()} | {:error, map()}
   def deliver(%SMS{} = sms, config \\ []) do
+    validate_iletimerkezi_config(config)
+
     headers = prepare_headers()
     body = prepare_body(sms, config) |> Jason.encode!()
 
-    Finch.build(
+    http_client().request(
       :post,
       @api_endpoint,
       headers,
-      body
+      body,
+      receive_timeout: 600_000
     )
-    |> Finch.request(HipcallSMSFinch, receive_timeout: 600_000)
-    |> case do
-      {:ok, %Finch.Response{status: 200, body: body}} ->
-        {:ok, body |> Jason.decode!()}
-
-      {:ok, %Finch.Response{status: status, body: body, headers: headers}} ->
-        {:error, %{status: status, body: body |> Jason.decode!(), headers: headers}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    |> handle_response()
   end
 
   # Prepares HTTP headers for Iletimerkezi API request
@@ -157,11 +150,14 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
     iys = provider_options[:iys] || @default_iys
     iys_list = provider_options[:iys_list] || @default_iys_list
 
+    key = config[:key] || get_config_value(:iletimerkezi_key, nil)
+    hash = config[:hash] || get_config_value(:iletimerkezi_hash, nil)
+
     %{
       request: %{
         authentication: %{
-          key: config[:key],
-          hash: config[:hash]
+          key: key,
+          hash: hash
         },
         order: %{
           sender: sms.from,
@@ -177,5 +173,71 @@ defmodule HipcallSMS.Adapters.Iletimerkezi do
         }
       }
     }
+  end
+
+  # Handles HTTP response from Iletimerkezi API
+  @spec handle_response({:ok, map()} | {:error, any()}) :: {:ok, map()} | {:error, map()}
+  defp handle_response({:ok, %{status: 200, body: body}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:ok, normalize_response(decoded_body)}
+
+      {:error, _} ->
+        {:error, %{status: 200, body: body, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_response({:ok, %{status: status, body: body, headers: headers}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:error, %{status: status, body: decoded_body, headers: headers}}
+
+      {:error, _} ->
+        {:error, %{status: status, body: body, headers: headers, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_response({:error, reason}) do
+    {:error, %{error: reason, provider: "iletimerkezi"}}
+  end
+
+  # Normalizes Iletimerkezi API response to standard format
+  @spec normalize_response(map()) :: map()
+  defp normalize_response(response) do
+    %{
+      id: get_in(response, ["response", "order", "id"]),
+      status: get_response_status(response),
+      provider: "iletimerkezi",
+      provider_response: response
+    }
+  end
+
+  # Extracts status from Iletimerkezi response
+  defp get_response_status(response) do
+    case get_in(response, ["response", "status", "code"]) do
+      "200" -> "queued"
+      _ -> "failed"
+    end
+  end
+
+  # Returns the configured HTTP client module
+  defp http_client do
+    Application.get_env(:hipcall_sms, :http_client, HipcallSMS.HTTPClient.FinchClient)
+  end
+
+  # Validates Iletimerkezi-specific configuration
+  defp validate_iletimerkezi_config(config) do
+    key = config[:key] || get_config_value(:iletimerkezi_key, nil)
+    hash = config[:hash] || get_config_value(:iletimerkezi_hash, nil)
+
+    if key in [nil, ""] do
+      raise "key is required for Iletimerkezi adapter"
+    end
+
+    if hash in [nil, ""] do
+      raise "hash is required for Iletimerkezi adapter"
+    end
+
+    :ok
   end
 end

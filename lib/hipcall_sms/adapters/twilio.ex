@@ -115,19 +115,21 @@ defmodule HipcallSMS.Adapters.Twilio do
   @impl HipcallSMS.Adapter
   @spec deliver(SMS.t(), Keyword.t()) :: {:ok, map()} | {:error, map()}
   def deliver(%SMS{} = sms, config \\ []) do
+    validate_twilio_config(config)
+
     account_sid = config[:account_sid] || get_config_value(:twilio_account_sid, nil)
     headers = prepare_headers(config)
     body = prepare_body(sms, config)
 
     url = "#{@api_endpoint}/#{account_sid}/Messages.json"
 
-    Finch.build(
+    http_client().request(
       :post,
       url,
       headers,
-      body
+      body,
+      receive_timeout: 600_000
     )
-    |> Finch.request(HipcallSMSFinch, receive_timeout: 600_000)
     |> handle_response()
   end
 
@@ -202,9 +204,9 @@ defmodule HipcallSMS.Adapters.Twilio do
   end
 
   # Handles HTTP response from Twilio API
-  @spec handle_response({:ok, Finch.Response.t()} | {:error, any()}) ::
+  @spec handle_response({:ok, map()} | {:error, any()}) ::
           {:ok, map()} | {:error, map()}
-  defp handle_response({:ok, %Finch.Response{status: status, body: body, headers: headers}})
+  defp handle_response({:ok, %{status: status, body: body, headers: headers}})
        when status in 200..299 do
     case Jason.decode(body) do
       {:ok, decoded_body} ->
@@ -215,7 +217,7 @@ defmodule HipcallSMS.Adapters.Twilio do
     end
   end
 
-  defp handle_response({:ok, %Finch.Response{status: status, body: body, headers: headers}}) do
+  defp handle_response({:ok, %{status: status, body: body, headers: headers}}) do
     case Jason.decode(body) do
       {:ok, decoded_body} ->
         {:error, %{status: status, body: decoded_body, headers: headers}}
@@ -246,4 +248,25 @@ defmodule HipcallSMS.Adapters.Twilio do
         ]
   defp maybe_add_param(params, _key, nil), do: params
   defp maybe_add_param(params, key, value), do: [{key, to_string(value)} | params]
+
+  # Returns the configured HTTP client module
+  defp http_client do
+    Application.get_env(:hipcall_sms, :http_client, HipcallSMS.HTTPClient.FinchClient)
+  end
+
+  # Validates Twilio-specific configuration
+  defp validate_twilio_config(config) do
+    account_sid = config[:account_sid] || get_config_value(:twilio_account_sid, nil)
+    auth_token = config[:auth_token] || get_config_value(:twilio_auth_token, nil)
+
+    if account_sid in [nil, ""] do
+      raise "account_sid is required for Twilio adapter"
+    end
+
+    if auth_token in [nil, ""] do
+      raise "auth_token is required for Twilio adapter"
+    end
+
+    :ok
+  end
 end

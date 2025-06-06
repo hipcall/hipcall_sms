@@ -34,7 +34,8 @@ defmodule HipcallSMS.MixProject do
       {:finch, "~> 0.19"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ex_doc, "~> 0.37", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.37", only: :dev, runtime: false},
+      {:mox, "~> 1.0", only: :test}
     ]
   end
 
