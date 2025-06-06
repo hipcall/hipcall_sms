@@ -2,7 +2,7 @@ defmodule HipcallSMS.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/hipcall/hipcall_sms"
-  @version "0.1.0"
+  @version "0.2.0"
 
   def project do
     [
@@ -16,7 +16,16 @@ defmodule HipcallSMS.MixProject do
       package: package(),
       source_url: @source_url,
       homepage_url: @source_url,
-      docs: docs()
+      docs: docs(),
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "test.coverage": :test
+      ],
+      aliases: aliases()
     ]
   end
 
@@ -34,7 +43,8 @@ defmodule HipcallSMS.MixProject do
       {:finch, "~> 0.19"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ex_doc, "~> 0.37", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.37", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.18", only: :test}
     ]
   end
 
@@ -43,7 +53,7 @@ defmodule HipcallSMS.MixProject do
       maintainers: ["Onur Ozgur OZKAN"],
       licenses: ["MIT"],
       links: %{
-        "Website" => "https://www.hipcall.com/en-gb/",
+        "Website" => "https://www.hipcall.com/en/",
         "GitHub" => @source_url
       }
     ]
@@ -57,6 +67,12 @@ defmodule HipcallSMS.MixProject do
       source_ref: "v#{@version}",
       source_url: @source_url,
       extras: ["README.md", "CHANGELOG.md", "LICENSE.md"]
+    ]
+  end
+
+  defp aliases do
+    [
+      "test.coverage": ["coveralls.html"]
     ]
   end
 end
