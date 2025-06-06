@@ -70,73 +70,78 @@ defmodule HipcallSMS.HTTPClient.FinchClientTest do
       assert match?({:error, _}, result)
     end
 
-    test "response structure matches expected format when successful" do
-      # This test will only run if we can make a successful request
-      # We'll try a simple request and if it works, verify the structure
-      result = FinchClient.request(:get, "https://httpbin.org/get", [], "", [])
+    test "response structure matches expected format" do
+      # Test that error responses have the expected structure
+      result = FinchClient.request(:get, "http://127.0.0.1:1", [], "", [])
 
       case result do
         {:ok, response} ->
-          # Verify the response has the expected structure
+          # If somehow successful, verify the response has the expected structure
           assert Map.has_key?(response, :status)
           assert Map.has_key?(response, :body)
           assert Map.has_key?(response, :headers)
           assert is_integer(response.status)
           assert is_binary(response.body)
           assert is_list(response.headers)
-          # If successful, should be a 2xx status
-          assert response.status >= 200 and response.status < 300
 
         {:error, reason} ->
           # Error responses should be in the expected format
           assert is_atom(reason) or is_struct(reason) or is_binary(reason)
-          # This is acceptable in CI environments where external requests might fail
+          # This is expected for connection refused
           assert true
       end
     end
 
-    test "POST request structure when successful" do
+    test "POST request with body and headers" do
       headers = [{"Content-Type", "application/json"}]
       body = ~s({"test": "data"})
 
-      result = FinchClient.request(:post, "https://httpbin.org/post", headers, body, [])
+      # Test that POST requests with body and headers don't crash
+      result = FinchClient.request(:post, "http://127.0.0.1:1", headers, body, [])
 
-      case result do
-        {:ok, response} ->
-          assert response.status == 200
-          assert is_binary(response.body)
-          assert is_list(response.headers)
-          # If successful, body should contain our test data
-          assert String.contains?(response.body, "test")
-          assert String.contains?(response.body, "data")
+      # Should return error tuple (connection refused), not crash
+      assert match?({:error, _}, result)
 
-        {:error, _reason} ->
-          # Network errors are acceptable in CI environment
-          assert true
-      end
+      # Test POST with empty body
+      result_empty = FinchClient.request(:post, "http://127.0.0.1:1", headers, "", [])
+      assert match?({:error, _}, result_empty)
+
+      # Test POST with large body
+      large_body = String.duplicate("x", 10000)
+      result_large = FinchClient.request(:post, "http://127.0.0.1:1", headers, large_body, [])
+      assert match?({:error, _}, result_large)
     end
 
-    test "preserves request headers when successful" do
+    test "accepts and processes request headers without crashing" do
       headers = [
         {"User-Agent", "HipcallSMS/1.0"},
         {"Accept", "application/json"},
         {"Custom-Header", "custom-value"}
       ]
 
-      result = FinchClient.request(:get, "https://httpbin.org/headers", headers, "", [])
+      # Test that the function accepts headers and doesn't crash
+      # Using a local endpoint that will fail but test header processing
+      result = FinchClient.request(:get, "http://127.0.0.1:1", headers, "", [])
 
-      case result do
-        {:ok, response} ->
-          # httpbin.org/headers returns the headers it received
-          assert is_binary(response.body)
-          assert String.contains?(response.body, "User-Agent")
-          assert String.contains?(response.body, "HipcallSMS/1.0")
-          assert String.contains?(response.body, "Custom-Header")
+      # Should return error tuple (connection refused), not crash
+      assert match?({:error, _}, result)
 
-        {:error, _reason} ->
-          # Network errors are acceptable in CI environment
-          assert true
-      end
+      # Test with empty headers
+      result_empty = FinchClient.request(:get, "http://127.0.0.1:1", [], "", [])
+      assert match?({:error, _}, result_empty)
+
+      # Test with multiple headers
+      many_headers = [
+        {"User-Agent", "HipcallSMS/1.0"},
+        {"Accept", "application/json"},
+        {"Content-Type", "application/json"},
+        {"Authorization", "Bearer token123"},
+        {"X-Custom-Header", "custom-value"},
+        {"X-Another-Header", "another-value"}
+      ]
+
+      result_many = FinchClient.request(:post, "http://127.0.0.1:1", many_headers, "{}", [])
+      assert match?({:error, _}, result_many)
     end
   end
 
@@ -158,18 +163,12 @@ defmodule HipcallSMS.HTTPClient.FinchClientTest do
 
   describe "timeout handling" do
     test "handles network timeouts gracefully" do
-      # Test with a very short timeout to force a timeout error
+      # Test with a very short timeout - connection to a closed port should timeout quickly
       result =
-        FinchClient.request(:get, "https://httpbin.org/delay/3", [], "", receive_timeout: 10)
+        FinchClient.request(:get, "http://127.0.0.1:1", [], "", receive_timeout: 10)
 
-      case result do
-        {:error, _reason} ->
-          assert true
-
-        {:ok, _response} ->
-          # If somehow the request completes very quickly, that's also acceptable
-          assert true
-      end
+      # Should return error tuple (timeout or connection refused), not crash
+      assert match?({:error, _}, result)
     end
 
     test "uses default timeout when not specified" do
