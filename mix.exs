@@ -2,7 +2,7 @@ defmodule HipcallSMS.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/hipcall/hipcall_sms"
-  @version "0.1.0"
+  @version "0.2.0"
 
   def project do
     [
@@ -10,13 +10,13 @@ defmodule HipcallSMS.MixProject do
       name: "HipcallSMS",
       description: "SMS SDK for different providers",
       version: @version,
-      elixir: "~> 1.18",
+      elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
+      docs: docs(),
       source_url: @source_url,
-      homepage_url: @source_url,
-      docs: docs()
+      homepage_url: @source_url
     ]
   end
 
@@ -34,7 +34,8 @@ defmodule HipcallSMS.MixProject do
       {:finch, "~> 0.19"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:ex_doc, "~> 0.37", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.37", only: :dev, runtime: false},
+      {:mox, "~> 1.0", only: :test}
     ]
   end
 
@@ -43,7 +44,7 @@ defmodule HipcallSMS.MixProject do
       maintainers: ["Onur Ozgur OZKAN"],
       licenses: ["MIT"],
       links: %{
-        "Website" => "https://www.hipcall.com/en-gb/",
+        "Website" => "https://www.hipcall.com/en/",
         "GitHub" => @source_url
       }
     ]

@@ -18,4 +18,14 @@ defmodule HipcallSMS.Application do
     opts = [strategy: :one_for_one, name: HipcallSMS.Supervisor]
     Supervisor.start_link(children, opts)
   end
+
+  @doc """
+  Returns the list of child specifications for the application supervisor.
+
+  Currently returns an empty list as the application has no children to supervise
+  beyond the initial setup in start/2.
+  """
+  def children do
+    []
+  end
 end

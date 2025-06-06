@@ -1,0 +1,63 @@
+name: Elixir CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+
+jobs:
+  mix_test:
+    name: mix test (Elixir ${{matrix.elixir}} | OTP ${{matrix.otp}})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: 1.16.x
+            otp: 26
+            os: ubuntu-latest
+          - elixir: 1.17.x
+            otp: 27
+            os: ubuntu-22.04
+            warnings_as_errors: true
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+      - name: Install Dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get --only test
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.hex
+            ~/.mix
+            _build
+          key: ${{ matrix.otp }}-${{ matrix.elixir }}-build
+      - run: mix compile --warnings-as-errors
+      - name: Tests & Coverage
+        uses: josecfreittas/elixir-coverage-feedback-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          coverage_threshold: 90
+  publish:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Check out
+        uses: actions/checkout@v3
+
+      - name: Publish package to hex.pm
+        uses: hipcall/github_action_publish_hex@v1
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
