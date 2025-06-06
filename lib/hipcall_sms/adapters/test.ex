@@ -98,6 +98,42 @@ defmodule HipcallSMS.Adapters.Test do
     {:ok, %{}}
   end
 
+  @doc """
+  Gets a mock account balance for testing purposes.
+
+  This function returns a mock balance response that can be used in tests
+  to simulate balance checking functionality.
+
+  ## Parameters
+
+  - `config` - Configuration (ignored for the test adapter)
+
+  ## Returns
+
+  Always returns a mock balance response.
+
+  ## Examples
+
+      # In a test
+      {:ok, balance} = get_balance([])
+      # => {:ok, %{balance: "100.00", currency: "USD", provider: "test"}}
+
+  """
+  @impl HipcallSMS.Adapter
+  @spec get_balance(Keyword.t()) :: {:ok, map()}
+  def get_balance(_config \\ []) do
+    {:ok,
+     %{
+       balance: "100.00",
+       currency: "USD",
+       provider: "test",
+       provider_response: %{
+         mock: true,
+         message: "This is a mock balance response for testing"
+       }
+     }}
+  end
+
   # Gets the list of processes that should receive SMS messages
   @spec pids() :: [pid()]
   defp pids do

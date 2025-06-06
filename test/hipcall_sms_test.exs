@@ -128,6 +128,54 @@ defmodule HipcallSMSTest do
     end
   end
 
+  describe "get_balance/1" do
+    test "gets balance with test adapter" do
+      assert {:ok, balance} = HipcallSMS.get_balance()
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
+      assert balance.provider_response.mock == true
+    end
+
+    test "gets balance with config override" do
+      config = [adapter: HipcallSMS.Adapters.Test]
+
+      assert {:ok, balance} = HipcallSMS.get_balance(config)
+
+      assert balance.balance == "100.00"
+      assert balance.currency == "USD"
+      assert balance.provider == "test"
+    end
+
+    test "raises error when no adapter configured" do
+      Application.delete_env(:hipcall_sms, :adapter)
+
+      assert_raise ArgumentError,
+                   "No adapter configured. Please set :adapter in your config.",
+                   fn ->
+                     HipcallSMS.get_balance()
+                   end
+
+      # Restore adapter for other tests
+      Application.put_env(:hipcall_sms, :adapter, HipcallSMS.Adapters.Test)
+    end
+
+    test "gets balance with Twilio adapter returns not supported error" do
+      config = [
+        adapter: HipcallSMS.Adapters.Twilio,
+        account_sid: "test_sid",
+        auth_token: "test_token"
+      ]
+
+      assert {:error, error} = HipcallSMS.get_balance(config)
+
+      assert error.error == "Balance checking not supported"
+      assert error.provider == "twilio"
+      assert error.message =~ "Twilio does not provide a simple balance endpoint"
+    end
+  end
+
   describe "error handling" do
     test "handles invalid SMS struct gracefully" do
       # This should raise a FunctionClauseError due to pattern matching

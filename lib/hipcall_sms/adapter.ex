@@ -125,6 +125,36 @@ defmodule HipcallSMS.Adapter do
   @callback deliver(sms(), config()) :: delivery_result()
 
   @doc """
+  Gets the account balance from the SMS provider.
+
+  This callback retrieves the current account balance information from the provider's API.
+  The response format may vary between providers but should include balance information.
+
+  ## Parameters
+
+  - `config` - Configuration keyword list with provider-specific settings
+
+  ## Returns
+
+  - `{:ok, balance_info}` - Success with balance information map
+  - `{:error, reason}` - Failure with error details
+
+  ## Examples
+
+      # Get balance with application config
+      {:ok, balance} = MyAdapter.get_balance([])
+
+      # Get balance with runtime config override
+      config_override = [
+        adapter: HipcallSMS.Adapters.Telnyx,
+        api_key: "runtime_api_key"
+      ]
+      {:ok, balance} = MyAdapter.get_balance(config_override)
+
+  """
+  @callback get_balance(config()) :: {:ok, map()} | {:error, map()}
+
+  @doc """
   Validates the adapter configuration.
 
   This callback validates that all required configuration keys are present

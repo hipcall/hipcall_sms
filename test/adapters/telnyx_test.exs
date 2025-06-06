@@ -395,4 +395,182 @@ defmodule HipcallSMS.Adapters.TelnyxTest do
       assert response.id == "msg_special_chars"
     end
   end
+
+  describe "get_balance/1" do
+    test "requires api_key configuration" do
+      assert_raise ArgumentError, ~r/api_key is required/, fn ->
+        Telnyx.get_balance([])
+      end
+    end
+
+    test "successfully gets balance with valid configuration" do
+      config = [api_key: "KEY_test123"]
+
+      # Mock successful balance API response
+      expect(HTTPClientMock, :request, fn :get, url, headers, body, _opts ->
+        assert url == "https://api.telnyx.com/v2/balance"
+        assert {"Authorization", "Bearer KEY_test123"} in headers
+        assert {"Content-Type", "application/json"} in headers
+        assert body == ""
+
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "data" => %{
+                 "balance" => "300.00",
+                 "currency" => "USD",
+                 "credit_limit" => "100.00",
+                 "available_credit" => "400.00",
+                 "pending" => "10.00"
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Telnyx.get_balance(config)
+      assert balance.balance == "300.00"
+      assert balance.currency == "USD"
+      assert balance.credit_limit == "100.00"
+      assert balance.available_credit == "400.00"
+      assert balance.pending == "10.00"
+      assert balance.provider == "telnyx"
+      assert is_map(balance.provider_response)
+    end
+
+    test "uses config from application environment" do
+      # Set up application config
+      Application.put_env(:hipcall_sms, :telnyx_api_key, "KEY_from_env")
+
+      expect(HTTPClientMock, :request, fn :get, _url, headers, _body, _opts ->
+        assert {"Authorization", "Bearer KEY_from_env"} in headers
+
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "data" => %{
+                 "balance" => "250.00",
+                 "currency" => "USD",
+                 "credit_limit" => "50.00",
+                 "available_credit" => "300.00",
+                 "pending" => "5.00"
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Telnyx.get_balance([])
+      assert balance.balance == "250.00"
+      assert balance.currency == "USD"
+
+      # Clean up
+      Application.delete_env(:hipcall_sms, :telnyx_api_key)
+    end
+
+    test "handles API error responses" do
+      config = [api_key: "KEY_invalid"]
+
+      expect(HTTPClientMock, :request, fn :get, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 401,
+           body:
+             Jason.encode!(%{
+               "errors" => [
+                 %{
+                   "code" => "unauthorized",
+                   "title" => "Unauthorized",
+                   "detail" => "Invalid API key"
+                 }
+               ]
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:error, error} = Telnyx.get_balance(config)
+      assert error.status == 401
+      assert is_map(error.body)
+    end
+
+    test "handles network errors" do
+      config = [api_key: "KEY_test456"]
+
+      expect(HTTPClientMock, :request, fn :get, _url, _headers, _body, _opts ->
+        {:error, :timeout}
+      end)
+
+      assert {:error, error} = Telnyx.get_balance(config)
+      assert error.error == :timeout
+      assert error.provider == "telnyx"
+    end
+
+    test "handles invalid JSON response" do
+      config = [api_key: "KEY_test456"]
+
+      expect(HTTPClientMock, :request, fn :get, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body: "invalid json response",
+           headers: []
+         }}
+      end)
+
+      assert {:error, error} = Telnyx.get_balance(config)
+      assert error.status == 200
+      assert error.error == "Invalid JSON response"
+    end
+
+    test "handles unexpected response format" do
+      config = [api_key: "KEY_test456"]
+
+      expect(HTTPClientMock, :request, fn :get, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body: Jason.encode!(%{"unexpected" => "format"}),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Telnyx.get_balance(config)
+      # Should return the raw response when format is unexpected
+      assert balance == %{"unexpected" => "format"}
+    end
+
+    test "works without config parameter" do
+      # Set up application config
+      Application.put_env(:hipcall_sms, :telnyx_api_key, "KEY_default")
+
+      expect(HTTPClientMock, :request, fn :get, _url, _headers, _body, _opts ->
+        {:ok,
+         %{
+           status: 200,
+           body:
+             Jason.encode!(%{
+               "data" => %{
+                 "balance" => "150.00",
+                 "currency" => "USD",
+                 "credit_limit" => "0.00",
+                 "available_credit" => "150.00",
+                 "pending" => "0.00"
+               }
+             }),
+           headers: []
+         }}
+      end)
+
+      assert {:ok, balance} = Telnyx.get_balance()
+      assert balance.balance == "150.00"
+
+      # Clean up
+      Application.delete_env(:hipcall_sms, :telnyx_api_key)
+    end
+  end
 end

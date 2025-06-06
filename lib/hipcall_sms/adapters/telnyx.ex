@@ -63,6 +63,7 @@ defmodule HipcallSMS.Adapters.Telnyx do
   """
 
   @api_endpoint "https://api.telnyx.com/v2/messages"
+  @balance_endpoint "https://api.telnyx.com/v2/balance"
 
   use HipcallSMS.Adapter, required_config: [:api_key]
 
@@ -123,6 +124,62 @@ defmodule HipcallSMS.Adapters.Telnyx do
       receive_timeout: 600_000
     )
     |> handle_response()
+  end
+
+  @doc """
+  Gets the account balance from Telnyx's REST API.
+
+  This function retrieves the current account balance using Telnyx's Balance API.
+  It handles authentication and response parsing.
+
+  ## Parameters
+
+  - `config` - Configuration keyword list (optional, defaults to application config)
+
+  ## Returns
+
+  - `{:ok, balance_info}` - Success with balance information
+  - `{:error, reason}` - Failure with error details including HTTP status and body
+
+  ## Response Format
+
+  Success responses contain normalized balance information:
+
+      %{
+        balance: "300.00",           # Current account balance
+        currency: "USD",             # Currency code
+        credit_limit: "100.00",      # Credit limit
+        available_credit: "400.00",  # Available credit (balance + credit limit)
+        pending: "10.00",            # Pending amount
+        provider: "telnyx",          # Provider identifier
+        provider_response: %{}       # Full Telnyx API response
+      }
+
+  ## Examples
+
+      # Get balance with application config
+      {:ok, balance} = get_balance()
+
+      # Get balance with custom config
+      config = [api_key: "custom_api_key"]
+      {:ok, balance} = get_balance(config)
+
+  """
+  @impl HipcallSMS.Adapter
+  @spec get_balance(Keyword.t()) :: {:ok, map()} | {:error, map()}
+  def get_balance(config \\ []) do
+    validate_telnyx_config(config)
+
+    headers = prepare_headers(config)
+
+    http_client().request(
+      :get,
+      @balance_endpoint,
+      headers,
+      "",
+      receive_timeout: 600_000
+    )
+    |> handle_balance_response()
   end
 
   # Prepares HTTP headers for Telnyx API request
@@ -202,6 +259,33 @@ defmodule HipcallSMS.Adapters.Telnyx do
     {:error, %{error: reason, provider: "telnyx"}}
   end
 
+  # Handles HTTP response from Telnyx Balance API
+  @spec handle_balance_response({:ok, map()} | {:error, any()}) ::
+          {:ok, map()} | {:error, map()}
+  defp handle_balance_response({:ok, %{status: 200, body: body}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:ok, normalize_balance_response(decoded_body)}
+
+      {:error, _} ->
+        {:error, %{status: 200, body: body, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_balance_response({:ok, %{status: status, body: body, headers: headers}}) do
+    case Jason.decode(body) do
+      {:ok, decoded_body} ->
+        {:error, %{status: status, body: decoded_body, headers: headers}}
+
+      {:error, _} ->
+        {:error, %{status: status, body: body, headers: headers, error: "Invalid JSON response"}}
+    end
+  end
+
+  defp handle_balance_response({:error, reason}) do
+    {:error, %{error: reason, provider: "telnyx"}}
+  end
+
   # Normalizes Telnyx API response to standard format
   @spec normalize_response(map()) :: map()
   defp normalize_response(%{"data" => data}) do
@@ -214,6 +298,22 @@ defmodule HipcallSMS.Adapters.Telnyx do
   end
 
   defp normalize_response(response), do: response
+
+  # Normalizes Telnyx Balance API response to standard format
+  @spec normalize_balance_response(map()) :: map()
+  defp normalize_balance_response(%{"data" => data}) do
+    %{
+      balance: data["balance"],
+      currency: data["currency"],
+      credit_limit: data["credit_limit"],
+      available_credit: data["available_credit"],
+      pending: data["pending"],
+      provider: "telnyx",
+      provider_response: data
+    }
+  end
+
+  defp normalize_balance_response(response), do: response
 
   # Helper function to conditionally add fields to the request body
   @spec maybe_add_field(map(), atom(), any()) :: map()
